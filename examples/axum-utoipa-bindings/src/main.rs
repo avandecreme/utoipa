@@ -57,14 +57,14 @@ mod customer {
     use utoipa_axum::routes;
 
     /// This is the customer
-    #[derive(ToSchema, Serialize)]
+    #[derive(Clone, ToSchema, Serialize, Debug)]
     struct Customer {
         name: String,
     }
 
     /// expose the Customer OpenAPI to parent module
     pub fn router() -> OpenApiRouter {
-        OpenApiRouter::new().routes(routes!(get_customer))
+        OpenApiRouter::new().routes(routes!(get_customer, get_customers))
     }
 
     /// Get customer
@@ -74,6 +74,55 @@ mod customer {
     async fn get_customer() -> Json<Customer> {
         Json(Customer {
             name: String::from("Bill Book"),
+        })
+    }
+
+    struct PaginationMarker<T> {
+        last_item: T,
+        server_data: String,
+    }
+
+    impl<T: std::fmt::Debug> Serialize for PaginationMarker<T> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            format!("{:?}:{}", self.last_item, self.server_data).serialize(serializer)
+        }
+    }
+
+    impl<T: std::fmt::Debug> ToSchema for PaginationMarker<T> {
+        fn name() -> std::borrow::Cow<'static, str> {
+            std::borrow::Cow::Borrowed("PaginationMarker")
+        }
+    }
+    impl<T> utoipa::__dev::ComposeSchema for PaginationMarker<T> {
+        fn compose(
+            _schemas: Vec<utoipa::openapi::RefOr<utoipa::openapi::Schema>>,
+        ) -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+            utoipa::openapi::ObjectBuilder::new()
+                .schema_type(utoipa::openapi::Type::String)
+                .into()
+        }
+    }
+
+    #[derive(ToSchema, Serialize)]
+    struct Customers {
+        customers: Vec<Customer>,
+        pagination_marker: PaginationMarker<Customer>,
+    }
+
+    #[utoipa::path(post, path = "", responses((status = OK, body = Customers)), tag = super::CUSTOMER_TAG)]
+    async fn get_customers() -> Json<Customers> {
+        let customer = Customer {
+            name: String::from("Bill Book"),
+        };
+        Json(Customers {
+            customers: vec![customer.clone()],
+            pagination_marker: PaginationMarker {
+                last_item: customer,
+                server_data: "Foo".to_owned(),
+            },
         })
     }
 }
